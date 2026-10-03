@@ -1,0 +1,72 @@
+name: Post prices
+
+on:
+  schedule:
+    # Cron times are UTC; Tehran is UTC+3:30. GitHub may start scheduled runs several minutes late.
+    - cron: "30 * * * *"   # every hour, on the hour in Tehran
+    - cron: "25 20 * * *"  # 23:55 Tehran: daily summary
+  workflow_dispatch:
+    inputs:
+      kind:
+        description: What to post
+        type: choice
+        options: [prices, summary]
+        default: prices
+
+# Needed to push the saved prices to the bot-data branch
+permissions:
+  contents: write
+
+# Never run two posts at once; they would race on the saved prices
+concurrency:
+  group: post-prices
+  cancel-in-progress: false
+
+env:
+  CHANNEL_ID: "@PricePulseIR"
+  CHANNEL_TITLE: Price Pulse
+  DATA_BRANCH: bot-data
+
+jobs:
+  post:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - run: pip install -r requirements.txt
+
+      # The prices of the last post / last summary (used for the colors and percentages) live
+      # in their own branch, checked out at data/, so they survive between runs and code pushes.
+      - name: Load saved prices
+        run: |
+          if git fetch --depth=1 origin "$DATA_BRANCH"; then
+            git worktree add data FETCH_HEAD
+          else
+            echo "No $DATA_BRANCH branch yet; starting without saved prices"
+            git worktree add --orphan -b "$DATA_BRANCH" data
+          fi
+
+      - name: Post
+        env:
+          BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
+          KIND: ${{ github.event.schedule == '25 20 * * *' && 'summary' || inputs.kind || 'prices' }}
+        run: python main.py --post "$KIND"
+
+      - name: Save prices
+        if: always()
+        working-directory: data
+        run: |
+          git add -A
+          if git diff --cached --quiet; then
+            echo "No price changes to save"
+            exit 0
+          fi
+          git -c user.name="github-actions[bot]" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
+            commit -m "Update saved prices"
+          git push origin "HEAD:refs/heads/$DATA_BRANCH"
