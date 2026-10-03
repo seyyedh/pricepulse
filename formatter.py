@@ -26,13 +26,25 @@ class Quote:
     asset: Asset
     price: float
     prev_price: float | None = None  # comparison base; None if unknown
+    day_change_pct: float | None = None  # daily change reported by the source, if any
 
 
 def to_persian_digits(text: str) -> str:
     return text.translate(_PERSIAN_DIGITS)
 
 
+def _change_emoji(change_pct: float) -> str:
+    rounded = round(change_pct, 2)
+    if rounded == 0:
+        return UNCHANGED
+    return UP if rounded > 0 else DOWN
+
+
 def trend_emoji(quote: Quote) -> str:
+    # If the source reports its own daily change, the emoji follows it so it matches the
+    # percentage shown next to the price
+    if quote.day_change_pct is not None:
+        return _change_emoji(quote.day_change_pct)
     # Compare at display precision so a change too small to see shows as unchanged
     if quote.prev_price is None:
         return UNCHANGED
@@ -55,7 +67,17 @@ def format_number(value: float, decimals: int = 0) -> str:
 def format_quote(quote: Quote) -> str:
     asset = quote.asset
     price = to_persian_digits(format_number(quote.price, asset.decimals))
-    return f"{trend_emoji(quote)} {escape(asset.name)}: <b>{price}</b> {escape(asset.unit)}"
+    line = f"{trend_emoji(quote)} {escape(asset.name)}: <b>{price}</b> {escape(asset.unit)}"
+    if quote.day_change_pct is not None:
+        line += f" ({format_change_pct(quote.day_change_pct)})"
+    return line
+
+
+def format_change_pct(change_pct: float) -> str:
+    """4.05 -> ۴٫۰۵٪+ ; -1.2 -> ۱٫۲۰٪- (sign after the number reads right in Persian text)."""
+    rounded = round(change_pct, 2)
+    sign = "+" if rounded > 0 else "-" if rounded < 0 else ""
+    return to_persian_digits(f"{abs(rounded):.2f}") + "٪" + sign
 
 
 def format_summary_quote(quote: Quote) -> str:

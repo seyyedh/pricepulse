@@ -12,6 +12,7 @@ import config
 from assets import ASSET_GROUPS, Asset
 from formatter import Quote
 from price_store import DATA_DIR, PriceStore
+from sources import SourcePrice
 from sources.tgju import StalePriceError
 
 logger = logging.getLogger(__name__)
@@ -20,9 +21,10 @@ last_post = PriceStore(DATA_DIR / "last_post.json")
 last_summary = PriceStore(DATA_DIR / "last_summary.json")
 
 
-async def _fetch(asset: Asset) -> float | None:
+async def _fetch(asset: Asset) -> SourcePrice | None:
     try:
-        return await asset.fetch()
+        result = await asset.fetch()
+        return result if isinstance(result, SourcePrice) else SourcePrice(result)
     except StalePriceError as e:
         logger.warning("Leaving out %s: %s", asset.key, e)
         return None
@@ -31,7 +33,7 @@ async def _fetch(asset: Asset) -> float | None:
         return None
 
 
-async def _fetch_open_assets() -> dict[str, float | None]:
+async def _fetch_open_assets() -> dict[str, SourcePrice | None]:
     """Prices of all assets whose market is open now, by key."""
     now = datetime.now(config.TIMEZONE).time()
     assets = [a for group in ASSET_GROUPS for a in group if a.is_open(now)]
@@ -39,14 +41,14 @@ async def _fetch_open_assets() -> dict[str, float | None]:
     return dict(zip((a.key for a in assets), prices))
 
 
-def _build_groups(prices: dict[str, float | None], base: PriceStore) -> list[list[Quote]]:
+def _build_groups(prices: dict[str, SourcePrice | None], base: PriceStore) -> list[list[Quote]]:
     """Quotes grouped like ASSET_GROUPS; assets without a price and empty groups are left out."""
     result = []
     for group in ASSET_GROUPS:
         quotes = [
-            Quote(a, prices[a.key], prev_price=base.get(a.key))
+            Quote(a, p.price, prev_price=base.get(a.key), day_change_pct=p.day_change_pct)
             for a in group
-            if prices.get(a.key) is not None
+            if (p := prices.get(a.key)) is not None
         ]
         if quotes:
             result.append(quotes)
@@ -76,8 +78,8 @@ async def get_summary_quotes() -> list[list[Quote]]:
     prices = await _fetch_open_assets()
     for group in ASSET_GROUPS:
         for asset in group:
-            if prices.get(asset.key) is None:
-                prices[asset.key] = last_post.get(asset.key)
+            if prices.get(asset.key) is None and (last := last_post.get(asset.key)) is not None:
+                prices[asset.key] = SourcePrice(last)
     return _build_groups(prices, last_summary)
 
 

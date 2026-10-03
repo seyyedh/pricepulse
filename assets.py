@@ -5,7 +5,7 @@ from datetime import time, timedelta
 from functools import partial
 from typing import Awaitable, Callable
 
-from sources import binance, nobitex, tgju
+from sources import SourcePrice, binance, chartix, nobitex, tgju
 
 
 @dataclass(frozen=True)
@@ -14,7 +14,7 @@ class Asset:
     name: str  # shown in the price message
     symbol: str  # shown in the daily summary
     unit: str
-    fetch: Callable[[], Awaitable[float]]
+    fetch: Callable[[], Awaitable[float | SourcePrice]]
     decimals: int = 0  # max decimals shown
     # (open, close) in Tehran time; outside it the asset is left out of the message.
     # None means it is always shown.
@@ -82,8 +82,13 @@ ASSET_GROUPS: list[list[Asset]] = [
         ),
     ],
     [
-        # Iran Mercantile Exchange deposit certificates, price per certificate unit
-        Asset("ime_gold", "سپرده شمش طلا", "IME Gold", "تومان", _tgju_toman("ime_certificate_gold_bars")),
-        Asset("ime_silver", "سپرده نقره", "IME Silver", "تومان", _tgju_toman("ime_certificate_silver_bars")),
+        # Iran Mercantile Exchange deposit certificates, price per certificate unit, with the
+        # exchange's own daily change (tgju also has gold/silver certificates but lags a day)
+        Asset("ime_gold", "سپرده شمش طلا", "IME Gold", "تومان", partial(chartix.fetch_price_toman, "GOLDBAR")),
+        Asset("ime_coin", "سپرده سکه", "IME Coin", "تومان", partial(chartix.fetch_price_toman, "GOLDCOIN")),
+        Asset("ime_silver", "سپرده نقره", "IME Silver", "تومان", partial(chartix.fetch_price_toman, "SILVERBAR")),
+        Asset("ime_copper", "سپرده مس", "IME Copper", "تومان", partial(chartix.fetch_price_toman, "COPPERCTHD")),
+        Asset("ime_zinc", "سپرده روی", "IME Zinc", "تومان", partial(chartix.fetch_price_toman, "ZINCINGOT")),
+        Asset("ime_iron", "سپرده سنگ آهن", "IME Iron Ore", "تومان", partial(chartix.fetch_price_toman, "IRONOREPLT")),
     ],
 ]
