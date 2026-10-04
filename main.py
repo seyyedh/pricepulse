@@ -2,7 +2,7 @@ import argparse
 import asyncio
 import logging
 import sys
-from datetime import time
+from datetime import datetime, time, timedelta
 
 from telegram import Bot, Update
 from telegram.constants import ChatAction, ParseMode
@@ -33,6 +33,7 @@ logging.getLogger("httpx").setLevel(logging.WARNING)
 logger = logging.getLogger(__name__)
 
 DAILY_SUMMARY_TIME = time(23, 55, tzinfo=config.TIMEZONE)
+POST_INTERVAL = timedelta(minutes=30)
 
 WELCOME_TEXT ="👋 خوش آمدید! عضویت شما تأیید شد و می‌توانید از ربات استفاده کنید."
 
@@ -127,6 +128,13 @@ def run_bot() -> None:
     app.job_queue.run_once(
         post_prices_job, when=0, name="startup_post",
         job_kwargs={"misfire_grace_time": None},
+    )
+    # Then on every hour and half hour
+    now = datetime.now(config.TIMEZONE)
+    next_slot = now.replace(minute=0, second=0, microsecond=0) + POST_INTERVAL * (now.minute // 30 + 1)
+    app.job_queue.run_repeating(
+        post_prices_job, interval=POST_INTERVAL, first=next_slot, name="prices",
+        job_kwargs={"misfire_grace_time": 300},
     )
     app.job_queue.run_daily(
         post_summary_job, time=DAILY_SUMMARY_TIME, name="daily_summary",

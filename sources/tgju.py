@@ -12,6 +12,8 @@ from zoneinfo import ZoneInfo
 
 import httpx
 
+from sources import SourcePrice
+
 logger = logging.getLogger(__name__)
 
 BASE_URLS = (
@@ -54,7 +56,7 @@ async def _current_prices() -> dict:
         raise RuntimeError("Could not fetch prices from tgju") from last_error
 
 
-async def fetch_price(key: str, max_age: timedelta, divisor: float = 1) -> float:
+async def fetch_price(key: str, max_age: timedelta, divisor: float = 1) -> SourcePrice:
     """Price of a tgju item, e.g. "ons" (gold ounce, USD) or "price_dollar_rl" (Rial; divisor=10 for Toman).
 
     Raises StalePriceError if tgju last updated the item more than max_age ago, since
@@ -64,6 +66,9 @@ async def fetch_price(key: str, max_age: timedelta, divisor: float = 1) -> float
     try:
         item = prices[key]
         price = float(item["p"].replace(",", "")) / divisor
+        # "dp" is the unsigned day change in percent, "dt" its direction ("high" / "low")
+        direction = {"high": 1, "low": -1}.get(item.get("dt"), 0)
+        day_change_pct = direction * float(item.get("dp") or 0)
         updated_at = datetime.fromisoformat(item["ts"]).replace(tzinfo=TGJU_TZ)
     except (KeyError, ValueError, AttributeError) as e:
         raise RuntimeError(f"tgju item {key!r} missing or invalid") from e
@@ -71,4 +76,4 @@ async def fetch_price(key: str, max_age: timedelta, divisor: float = 1) -> float
     age = datetime.now(TGJU_TZ) - updated_at
     if age > max_age:
         raise StalePriceError(f"tgju item {key!r} was last updated {updated_at:%Y-%m-%d %H:%M} ({age} ago)")
-    return price
+    return SourcePrice(price, day_change_pct)

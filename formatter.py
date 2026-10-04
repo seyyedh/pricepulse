@@ -41,19 +41,24 @@ def _change_emoji(change_pct: float) -> str:
 
 
 def trend_emoji(quote: Quote) -> str:
-    # If the source reports its own daily change, the emoji follows it so it matches the
-    # percentage shown next to the price
-    if quote.day_change_pct is not None:
-        return _change_emoji(quote.day_change_pct)
-    # Compare at display precision so a change too small to see shows as unchanged
-    if quote.prev_price is None:
-        return UNCHANGED
-    decimals = quote.asset.decimals
-    price = round(quote.price, decimals)
-    prev = round(quote.prev_price, decimals)
-    if price == prev:
-        return UNCHANGED
-    return UP if price > prev else DOWN
+    """Color of the price's move.
+
+    - Assets showing their daily change are colored by it, to match the percentage shown.
+    - Others by the change since prev_price (an hour ago, like a one-hour candle), compared
+      at display precision so a change too small to see doesn't count.
+    - If that didn't move (e.g. the market is closed) or is unknown, by the source's daily
+      change, so a quiet market shows the direction of its last day.
+    """
+    day = quote.day_change_pct
+    if quote.asset.show_day_change and day is not None:
+        return _change_emoji(day)
+    if quote.prev_price is not None:
+        decimals = quote.asset.decimals
+        price = round(quote.price, decimals)
+        prev = round(quote.prev_price, decimals)
+        if price != prev:
+            return UP if price > prev else DOWN
+    return _change_emoji(day) if day is not None else UNCHANGED
 
 
 def format_number(value: float, decimals: int = 0) -> str:
@@ -68,7 +73,7 @@ def format_quote(quote: Quote) -> str:
     asset = quote.asset
     price = to_persian_digits(format_number(quote.price, asset.decimals))
     line = f"{trend_emoji(quote)} {escape(asset.name)}: <b>{price}</b> {escape(asset.unit)}"
-    if quote.day_change_pct is not None:
+    if asset.show_day_change and quote.day_change_pct is not None:
         line += f" ({format_change_pct(quote.day_change_pct)})"
     return line
 

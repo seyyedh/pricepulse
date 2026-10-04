@@ -5,12 +5,12 @@ from datetime import time, timedelta
 from functools import partial
 from typing import Awaitable, Callable
 
-from sources import SourcePrice, binance, chartix, nobitex, tgju
+from sources import SourcePrice, binance, chartix, goldapi, nobitex, tgju
 
 
 @dataclass(frozen=True)
 class Asset:
-    key: str  # stable id, used to remember the last posted price
+    key: str  # stable id, used to remember past prices
     name: str  # shown in the price message
     symbol: str  # shown in the daily summary
     unit: str
@@ -19,6 +19,8 @@ class Asset:
     # (open, close) in Tehran time; outside it the asset is left out of the message.
     # None means it is always shown.
     trading_hours: tuple[time, time] | None = None
+    # Show the source's daily change next to the price (and color by it)
+    show_day_change: bool = False
 
     def is_open(self, now: time) -> bool:
         if self.trading_hours is None:
@@ -39,13 +41,19 @@ IRAN_MAX_AGE = timedelta(days=4)
 GRAMS_PER_MESGHAL = 4.608
 
 
-def _tgju(key: str, max_age: timedelta = GLOBAL_MAX_AGE) -> Callable[[], Awaitable[float]]:
+def _tgju(key: str, max_age: timedelta = GLOBAL_MAX_AGE) -> Callable[[], Awaitable[SourcePrice]]:
     return partial(tgju.fetch_price, key, max_age)
 
 
-def _tgju_toman(key: str) -> Callable[[], Awaitable[float]]:
+def _tgju_toman(key: str) -> Callable[[], Awaitable[SourcePrice]]:
     # tgju quotes Iranian prices in Rial
     return partial(tgju.fetch_price, key, IRAN_MAX_AGE, divisor=10)
+
+
+def _ime(key: str, name: str, symbol: str, ticker: str) -> Asset:
+    # Iran Mercantile Exchange deposit certificate, price per certificate unit in Toman,
+    # shown with the exchange's own daily change
+    return Asset(key, name, symbol, "تومان", partial(chartix.fetch_price_toman, ticker), show_day_change=True)
 
 
 # Each group is a block in the message, separated by a blank line
@@ -60,10 +68,15 @@ ASSET_GROUPS: list[list[Asset]] = [
         Asset("usd", "دلار", "USD", "تومان", _tgju_toman("price_dollar_rl")),
         # tgju's plain "oil" item is stale
         Asset("brent", "نفت برنت", "Brent", "دلار", _tgju("oil_brent"), decimals=2),
-        Asset("xau", "انس طلا", "XAU", "دلار", _tgju("ons"), decimals=2),
-        Asset("xag", "انس نقره", "XAG", "دلار", _tgju("silver"), decimals=2),
-        # Global base metal prices per metric ton (tgju's plain "copper"/"zinc" items are stale)
-        Asset("copper", "مس", "Copper", "دلار/تن", _tgju("base_global_copper")),
+        # gold-api updates every few seconds; tgju's global prices can lag
+        Asset("xau", "انس طلا", "XAU", "دلار", partial(goldapi.fetch_price, "XAU"), decimals=2),
+        Asset("xag", "انس نقره", "XAG", "دلار", partial(goldapi.fetch_price, "XAG"), decimals=2),
+        # Copper is COMEX (USD/lb, converted to tons); zinc is tgju's global (LME) price.
+        # tgju's plain "copper"/"zinc" items are stale
+        Asset(
+            "copper", "مس", "Copper", "دلار/تن",
+            partial(goldapi.fetch_price, "HG", multiplier=goldapi.POUNDS_PER_TON),
+        ),
         Asset("zinc", "روی", "Zinc", "دلار/تن", _tgju("base_global_zinc")),
     ],
     [
@@ -82,13 +95,12 @@ ASSET_GROUPS: list[list[Asset]] = [
         ),
     ],
     [
-        # Iran Mercantile Exchange deposit certificates, price per certificate unit, with the
-        # exchange's own daily change (tgju also has gold/silver certificates but lags a day)
-        Asset("ime_gold", "سپرده شمش طلا", "IME Gold", "تومان", partial(chartix.fetch_price_toman, "GOLDBAR")),
-        Asset("ime_coin", "سپرده سکه", "IME Coin", "تومان", partial(chartix.fetch_price_toman, "GOLDCOIN")),
-        Asset("ime_silver", "سپرده نقره", "IME Silver", "تومان", partial(chartix.fetch_price_toman, "SILVERBAR")),
-        Asset("ime_copper", "سپرده مس", "IME Copper", "تومان", partial(chartix.fetch_price_toman, "COPPERCTHD")),
-        Asset("ime_zinc", "سپرده روی", "IME Zinc", "تومان", partial(chartix.fetch_price_toman, "ZINCINGOT")),
-        Asset("ime_iron", "سپرده سنگ آهن", "IME Iron Ore", "تومان", partial(chartix.fetch_price_toman, "IRONOREPLT")),
+        # tgju also has gold/silver certificates but lags a day
+        _ime("ime_gold", "سپرده شمش طلا", "IME Gold", "GOLDBAR"),
+        _ime("ime_coin", "سپرده سکه", "IME Coin", "GOLDCOIN"),
+        _ime("ime_silver", "سپرده نقره", "IME Silver", "SILVERBAR"),
+        _ime("ime_copper", "سپرده مس", "IME Copper", "COPPERCTHD"),
+        _ime("ime_zinc", "سپرده روی", "IME Zinc", "ZINCINGOT"),
+        _ime("ime_iron", "سپرده سنگ آهن", "IME Iron Ore", "IRONOREPLT"),
     ],
 ]

@@ -4,6 +4,8 @@ import logging
 
 import httpx
 
+from sources import SourcePrice
+
 logger = logging.getLogger(__name__)
 
 # api.nobitex.ir does not resolve from some networks; apiv2 serves the same API
@@ -14,8 +16,8 @@ BASE_URLS = (
 TIMEOUT = 10
 
 
-async def fetch_price_toman(currency: str) -> float:
-    """Returns the last traded price of a currency like "usdt" in Toman."""
+async def fetch_price_toman(currency: str) -> SourcePrice:
+    """Last traded price of a currency like "usdt" in Toman, with its day change."""
     pair = f"{currency}-rls"
     last_error: Exception | None = None
     async with httpx.AsyncClient(timeout=TIMEOUT) as client:
@@ -29,8 +31,8 @@ async def fetch_price_toman(currency: str) -> float:
                 data = resp.json()
                 if data.get("status") != "ok":
                     raise ValueError(f"unexpected response: {data}")
-                rial = float(data["stats"][pair]["latest"])
-                return rial / 10
+                stats = data["stats"][pair]
+                return SourcePrice(float(stats["latest"]) / 10, float(stats["dayChange"]))
             except (httpx.HTTPError, KeyError, ValueError) as e:
                 logger.warning("Nobitex request to %s failed for %s: %s", base, pair, e)
                 last_error = e
