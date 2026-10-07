@@ -1,8 +1,13 @@
 name: Post prices
 
 # Triggered from outside (cron-job.org, via the GitHub API) every half hour and at 23:55
-# Tehran: GitHub's own cron schedule is best-effort and often skips runs for hours.
+# Tehran. GitHub's own cron below is only a backup: it is best-effort and often skips runs
+# for hours. A post made by one trigger is not repeated by the other (see MIN_REPOST_GAP).
 on:
+  schedule:
+    # UTC; Tehran is UTC+3:30
+    - cron: "0,30 * * * *"   # every half hour
+    - cron: "25 20 * * *"    # 23:55 Tehran: daily summary
   workflow_dispatch:
     inputs:
       kind:
@@ -53,7 +58,7 @@ jobs:
       - name: Post
         env:
           BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
-          KIND: ${{ inputs.kind }}
+          KIND: ${{ github.event.schedule == '25 20 * * *' && 'summary' || inputs.kind || 'prices' }}
         run: python main.py --post "$KIND"
 
       - name: Save prices

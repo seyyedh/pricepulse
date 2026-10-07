@@ -17,6 +17,7 @@ from telegram.ext import (
 import config
 from formatter import format_price_message, format_summary_message
 from price_service import get_quotes, get_summary_quotes, mark_posted, mark_summary_posted
+from price_store import DATA_DIR, PriceStore
 from membership import (
     CHECK_MEMBERSHIP_CALLBACK,
     NOT_MEMBER_TEXT,
@@ -34,6 +35,10 @@ logger = logging.getLogger(__name__)
 
 DAILY_SUMMARY_TIME = time(23, 55, tzinfo=config.TIMEZONE)
 POST_INTERVAL = timedelta(minutes=30)
+
+# One-shot mode can be triggered by more than one scheduler (cron-job.org, with GitHub's own
+# cron as a backup); a post made more recently than this is not repeated
+MIN_REPOST_GAP = {"prices": timedelta(minutes=20), "summary": timedelta(hours=12)}
 
 WELCOME_TEXT ="👋 خوش آمدید! عضویت شما تأیید شد و می‌توانید از ربات استفاده کنید."
 
@@ -111,9 +116,22 @@ async def post_summary_job(context: ContextTypes.DEFAULT_TYPE) -> None:
 
 
 async def post_once(kind: str) -> bool:
-    """One-shot mode for external schedulers (e.g. GitHub Actions): post and exit."""
+    """One-shot mode for external schedulers (e.g. GitHub Actions): post and exit.
+
+    Skips (successfully) if the same kind was posted less than MIN_REPOST_GAP ago.
+    """
+    post_times = PriceStore(DATA_DIR / "post_times.json")  # kind -> Unix time of last post
+    now = datetime.now(config.TIMEZONE)
+    last = post_times.get(kind)
+    if last is not None and now - datetime.fromtimestamp(last, config.TIMEZONE) < MIN_REPOST_GAP[kind]:
+        logger.info("Skipping %s: already posted at %s", kind, datetime.fromtimestamp(last, config.TIMEZONE))
+        return True
+
     async with Bot(config.BOT_TOKEN) as bot:
-        return await POSTERS[kind](bot)
+        posted = await POSTERS[kind](bot)
+    if posted:
+        post_times.update({kind: now.timestamp()})
+    return posted
 
 
 def run_bot() -> None:
