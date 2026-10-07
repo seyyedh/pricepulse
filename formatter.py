@@ -27,6 +27,8 @@ class Quote:
     price: float
     prev_price: float | None = None  # comparison base; None if unknown
     day_change_pct: float | None = None  # daily change reported by the source, if any
+    hour_change_pct: float | None = None  # last hour's change reported by the source, if any
+    last_move_from: float | None = None  # the price before its last move, if known
 
 
 def to_persian_digits(text: str) -> str:
@@ -44,21 +46,30 @@ def trend_emoji(quote: Quote) -> str:
     """Color of the price's move.
 
     - Assets showing their daily change are colored by it, to match the percentage shown.
-    - Others by the change since prev_price (an hour ago, like a one-hour candle), compared
-      at display precision so a change too small to see doesn't count.
+    - Others by their move over the last hour (a one-hour candle): as reported by the source
+      if it can (Binance), else the change since prev_price (an hour ago), compared at display
+      precision so a change too small to see doesn't count.
     - If that didn't move (e.g. the market is closed) or is unknown, by the source's daily
       change, so a quiet market shows the direction of its last day.
+    - If that is zero too (e.g. a new day before the market opens), by the price's last move,
+      like the last candle on a chart keeps its color.
     """
     day = quote.day_change_pct
     if quote.asset.show_day_change and day is not None:
         return _change_emoji(day)
+    if quote.hour_change_pct is not None and (emoji := _change_emoji(quote.hour_change_pct)) != UNCHANGED:
+        return emoji
     if quote.prev_price is not None:
         decimals = quote.asset.decimals
         price = round(quote.price, decimals)
         prev = round(quote.prev_price, decimals)
         if price != prev:
             return UP if price > prev else DOWN
-    return _change_emoji(day) if day is not None else UNCHANGED
+    if day is not None and (emoji := _change_emoji(day)) != UNCHANGED:
+        return emoji
+    if quote.last_move_from is not None:
+        return UP if quote.price > quote.last_move_from else DOWN
+    return UNCHANGED
 
 
 def format_number(value: float, decimals: int = 0) -> str:

@@ -32,6 +32,15 @@ class PriceHistory:
         candidates = [s for s in self._samples.get(key, []) if oldest_allowed <= s[0] <= newest_allowed]
         return max(candidates, key=lambda s: s[0])[1] if candidates else None
 
+    def last_different_price(self, key: str, price: float, decimals: int) -> float | None:
+        """The most recent price that differs from price at display precision: the start of
+        the price's last move (like the last candle's color on a chart)."""
+        current = round(price, decimals)
+        for _, sample in reversed(self._samples.get(key, [])):
+            if round(sample, decimals) != current:
+                return sample
+        return None
+
     def record(self, prices: dict[str, float], at: datetime) -> None:
         cutoff = at - RETENTION
         for key, price in prices.items():

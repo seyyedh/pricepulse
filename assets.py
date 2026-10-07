@@ -1,6 +1,7 @@
 """The assets shown in the price message, in display order."""
 
-from dataclasses import dataclass
+import asyncio
+from dataclasses import dataclass, replace
 from datetime import time, timedelta
 from functools import partial
 from typing import Awaitable, Callable
@@ -50,6 +51,25 @@ def _tgju_toman(key: str) -> Callable[[], Awaitable[SourcePrice]]:
     return partial(tgju.fetch_price, key, IRAN_MAX_AGE, divisor=10)
 
 
+def _with_tgju_day_change(
+    fetch: Callable[[], Awaitable[float]], tgju_key: str
+) -> Callable[[], Awaitable[SourcePrice]]:
+    """Price from fetch, plus the day change of the same instrument on tgju.
+
+    For sources that report no change of their own, so the trend has a fallback when the
+    price an hour ago isn't known. If tgju fails, the price is still returned.
+    """
+    async def fetch_with_change() -> SourcePrice:
+        price, tgju_price = await asyncio.gather(fetch(), _tgju(tgju_key)(), return_exceptions=True)
+        if isinstance(price, BaseException):
+            raise price
+        if isinstance(tgju_price, BaseException):
+            return SourcePrice(price)
+        return replace(tgju_price, price=price)
+
+    return fetch_with_change
+
+
 def _ime(key: str, name: str, symbol: str, ticker: str) -> Asset:
     # Iran Mercantile Exchange deposit certificate, price per certificate unit in Toman,
     # shown with the exchange's own daily change
@@ -69,13 +89,22 @@ ASSET_GROUPS: list[list[Asset]] = [
         # tgju's plain "oil" item is stale
         Asset("brent", "نفت برنت", "Brent", "دلار", _tgju("oil_brent"), decimals=2),
         # gold-api updates every few seconds; tgju's global prices can lag
-        Asset("xau", "انس طلا", "XAU", "دلار", partial(goldapi.fetch_price, "XAU"), decimals=2),
-        Asset("xag", "انس نقره", "XAG", "دلار", partial(goldapi.fetch_price, "XAG"), decimals=2),
+        Asset(
+            "xau", "انس طلا", "XAU", "دلار",
+            _with_tgju_day_change(partial(goldapi.fetch_price, "XAU"), "ons"), decimals=2,
+        ),
+        Asset(
+            "xag", "انس نقره", "XAG", "دلار",
+            _with_tgju_day_change(partial(goldapi.fetch_price, "XAG"), "silver"), decimals=2,
+        ),
         # Copper is COMEX (USD/lb, converted to tons); zinc is tgju's global (LME) price.
         # tgju's plain "copper"/"zinc" items are stale
         Asset(
             "copper", "مس", "Copper", "دلار/تن",
-            partial(goldapi.fetch_price, "HG", multiplier=goldapi.POUNDS_PER_TON),
+            _with_tgju_day_change(
+                partial(goldapi.fetch_price, "HG", multiplier=goldapi.POUNDS_PER_TON),
+                "base_global_copper2",  # tgju's COMEX copper
+            ),
         ),
         Asset("zinc", "روی", "Zinc", "دلار/تن", _tgju("base_global_zinc")),
     ],

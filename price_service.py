@@ -46,13 +46,19 @@ async def _fetch_open_assets() -> dict[str, SourcePrice | None]:
 
 
 def _build_groups(
-    prices: dict[str, SourcePrice | None], prev_price: Callable[[str], float | None]
+    prices: dict[str, SourcePrice | None],
+    prev_price: Callable[[str], float | None],
+    last_move_from: Callable[[Asset, float], float | None] = lambda asset, price: None,
 ) -> list[list[Quote]]:
     """Quotes grouped like ASSET_GROUPS; assets without a price and empty groups are left out."""
     result = []
     for group in ASSET_GROUPS:
         quotes = [
-            Quote(a, p.price, prev_price=prev_price(a.key), day_change_pct=p.day_change_pct)
+            Quote(
+                a, p.price, prev_price=prev_price(a.key),
+                day_change_pct=p.day_change_pct, hour_change_pct=p.hour_change_pct,
+                last_move_from=last_move_from(a, p.price),
+            )
             for a in group
             if (p := prices.get(a.key)) is not None
         ]
@@ -71,7 +77,11 @@ async def get_quotes() -> list[list[Quote]]:
     """
     now = datetime.now(config.TIMEZONE)
     prices = await _fetch_open_assets()
-    groups = _build_groups(prices, lambda key: history.price_hour_ago(key, now))
+    groups = _build_groups(
+        prices,
+        lambda key: history.price_hour_ago(key, now),
+        lambda asset, price: history.last_different_price(asset.key, price, asset.decimals),
+    )
     history.record({key: p.price for key, p in prices.items() if p is not None}, now)
     return groups
 
