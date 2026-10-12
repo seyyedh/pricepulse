@@ -132,4 +132,11 @@ ASSET_GROUPS: list[list[Asset]] = [
         _ime("ime_zinc", "سپرده روی", "IME Zinc", "ZINCINGOT"),
         _ime("ime_iron", "سپرده سنگ آهن", "IME Iron Ore", "IRONOREPLT"),
     ],
+    [
+        # Free-market rates, like the dollar above
+        Asset("eur", "یورو", "EUR", "تومان", _tgju_toman("price_eur")),
+        Asset("gbp", "پوند", "GBP", "تومان", _tgju_toman("price_gbp")),
+        Asset("try", "لیر ترکیه", "TRY", "تومان", _tgju_toman("price_try")),
+        Asset("aed", "درهم امارات", "AED", "تومان", _tgju_toman("price_aed")),
+    ],
 ]
