@@ -39,6 +39,9 @@ POST_INTERVAL = timedelta(minutes=30)
 # One-shot mode can be triggered by more than one scheduler (cron-job.org, with GitHub's own
 # cron as a backup); a post made more recently than this is not repeated
 MIN_REPOST_GAP = {"prices": timedelta(minutes=20), "summary": timedelta(hours=12)}
+# Backup runs fire at random times; they only fill gaps the main scheduler left, so they
+# don't take a slot just before the main scheduler's on-time post (which would then be skipped)
+MIN_REPOST_GAP_BACKUP = {"prices": timedelta(minutes=45), "summary": timedelta(hours=12)}
 
 WELCOME_TEXT ="👋 خوش آمدید! عضویت شما تأیید شد و می‌توانید از ربات استفاده کنید."
 
@@ -115,15 +118,17 @@ async def post_summary_job(context: ContextTypes.DEFAULT_TYPE) -> None:
     await post_summary(context.bot)
 
 
-async def post_once(kind: str) -> bool:
+async def post_once(kind: str, backup: bool = False) -> bool:
     """One-shot mode for external schedulers (e.g. GitHub Actions): post and exit.
 
-    Skips (successfully) if the same kind was posted less than MIN_REPOST_GAP ago.
+    Skips (successfully) if the same kind was posted less than MIN_REPOST_GAP ago
+    (MIN_REPOST_GAP_BACKUP for a backup scheduler's run).
     """
     post_times = PriceStore(DATA_DIR / "post_times.json")  # kind -> Unix time of last post
     now = datetime.now(config.TIMEZONE)
     last = post_times.get(kind)
-    if last is not None and now - datetime.fromtimestamp(last, config.TIMEZONE) < MIN_REPOST_GAP[kind]:
+    min_gap = (MIN_REPOST_GAP_BACKUP if backup else MIN_REPOST_GAP)[kind]
+    if last is not None and now - datetime.fromtimestamp(last, config.TIMEZONE) < min_gap:
         logger.info("Skipping %s: already posted at %s", kind, datetime.fromtimestamp(last, config.TIMEZONE))
         return True
 
@@ -170,10 +175,14 @@ def main() -> None:
         "--post", choices=POSTERS,
         help="post once to the channel and exit, instead of running the bot",
     )
+    parser.add_argument(
+        "--backup", action="store_true",
+        help="with --post: run from a backup scheduler; only post if the main one missed a slot",
+    )
     args = parser.parse_args()
 
     if args.post:
-        sys.exit(0 if asyncio.run(post_once(args.post)) else 1)
+        sys.exit(0 if asyncio.run(post_once(args.post, args.backup)) else 1)
     run_bot()
 
 

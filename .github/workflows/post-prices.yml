@@ -59,7 +59,9 @@ jobs:
         env:
           BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
           KIND: ${{ github.event.schedule == '25 20 * * *' && 'summary' || inputs.kind || 'prices' }}
-        run: python main.py --post "$KIND"
+          # GitHub's cron is only the backup trigger
+          BACKUP: ${{ github.event_name == 'schedule' && '--backup' || '' }}
+        run: python main.py --post "$KIND" $BACKUP
 
       - name: Save prices
         if: always()
