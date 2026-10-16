@@ -18,6 +18,7 @@ DOWN = "🔴"
 UNCHANGED = "⚪️"
 CHANNEL_EMOJI = "📊"
 BUBBLE_EMOJI = "🫧"
+RLM = "‏"  # right-to-left mark (invisible)
 SUMMARY_TITLE = "📋 خلاصه تغییرات ۲۴ ساعت گذشته"
 
 _PERSIAN_DIGITS = str.maketrans("0123456789.", "۰۱۲۳۴۵۶۷۸۹٫")
@@ -89,7 +90,18 @@ def format_quote(quote: Quote) -> str:
     line = f"{trend_emoji(quote)} {escape(asset.name)}: <b>{price}</b> {escape(asset.unit)}"
     if (day := _day_change(quote)) is not None:
         line += f" ({format_change_pct(day)})"
-    return line
+    return rtl_line(line)
+
+
+def rtl_line(line: str) -> str:
+    """Wrap a Persian line in right-to-left marks.
+
+    Telegram guesses each line's direction from its characters; a line ending in digits and
+    signs (e.g. "...: ۰٫۹۷٪+") can be shown left-to-right, with the name on the left and the
+    number on the right. The leading mark makes the line right-to-left, the trailing one keeps
+    a trailing +/- next to its number.
+    """
+    return f"{RLM}{line}{RLM}"
 
 
 def format_change_pct(change_pct: float) -> str:
@@ -138,7 +150,7 @@ def _blocks(groups: list[list[Quote]], format_line) -> str:
 
 
 def format_bubble(bubble: Bubble) -> str:
-    return f"{BUBBLE_EMOJI} {escape(bubble.name)}: <b>{format_change_pct(bubble.pct)}</b>"
+    return rtl_line(f"{BUBBLE_EMOJI} {escape(bubble.name)}: <b>{format_change_pct(bubble.pct)}</b>")
 
 
 def format_price_message(
