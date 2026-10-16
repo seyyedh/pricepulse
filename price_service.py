@@ -67,7 +67,7 @@ def _build_groups(
     return result
 
 
-def _prices_of(groups: list[list[Quote]]) -> dict[str, float]:
+def prices_of(groups: list[list[Quote]]) -> dict[str, float]:
     return {q.asset.key: q.price for group in groups for q in group}
 
 
@@ -88,7 +88,7 @@ async def get_quotes() -> list[list[Quote]]:
 
 def mark_posted(groups: list[list[Quote]]) -> None:
     """Call after a price message was posted to the channel."""
-    last_post.update(_prices_of(groups))
+    last_post.update(prices_of(groups))
 
 
 async def get_summary_quotes() -> list[list[Quote]]:
@@ -107,4 +107,4 @@ async def get_summary_quotes() -> list[list[Quote]]:
 
 def mark_summary_posted(groups: list[list[Quote]]) -> None:
     """Call after the daily summary was posted; tomorrow's summary is compared with it."""
-    last_summary.update(_prices_of(groups))
+    last_summary.update(prices_of(groups))

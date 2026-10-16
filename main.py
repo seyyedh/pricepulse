@@ -16,7 +16,8 @@ from telegram.ext import (
 
 import config
 from formatter import format_price_message, format_summary_message
-from price_service import get_quotes, get_summary_quotes, mark_posted, mark_summary_posted
+from bubbles import get_bubbles
+from price_service import get_quotes, get_summary_quotes, mark_posted, mark_summary_posted, prices_of
 from price_store import DATA_DIR, PriceStore
 from membership import (
     CHECK_MEMBERSHIP_CALLBACK,
@@ -59,7 +60,7 @@ async def prices(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if not quotes:
         await update.effective_message.reply_text("⚠️ دریافت قیمت‌ها با خطا مواجه شد، کمی بعد دوباره تلاش کنید.")
         return
-    await update.effective_message.reply_text(format_price_message(quotes), parse_mode=ParseMode.HTML)
+    await update.effective_message.reply_text(await _price_message(quotes), parse_mode=ParseMode.HTML)
 
 
 async def check_membership_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -72,6 +73,11 @@ async def check_membership_callback(update: Update, context: ContextTypes.DEFAUL
         # Keep the join message as is so the user can try again
         if query.message and query.message.text != NOT_MEMBER_TEXT:
             await query.edit_message_text(NOT_MEMBER_TEXT, reply_markup=join_keyboard())
+
+
+async def _price_message(quotes) -> str:
+    """The price message, with the IME certificates' bubbles."""
+    return format_price_message(quotes, bubbles=await get_bubbles(prices_of(quotes)))
 
 
 async def _send_to_channel(bot: Bot, text: str) -> bool:
@@ -88,7 +94,7 @@ async def post_prices(bot: Bot) -> bool:
     if not quotes:
         logger.error("No prices could be fetched; nothing posted to %s", config.CHANNEL_ID)
         return False
-    if not await _send_to_channel(bot, format_price_message(quotes)):
+    if not await _send_to_channel(bot, await _price_message(quotes)):
         return False
     mark_posted(quotes)
     logger.info("Posted prices to %s", config.CHANNEL_ID)

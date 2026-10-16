@@ -11,11 +11,13 @@ import jdatetime
 
 import config
 from assets import Asset
+from bubbles import Bubble
 
 UP = "🟢"
 DOWN = "🔴"
 UNCHANGED = "⚪️"
 CHANNEL_EMOJI = "📊"
+BUBBLE_EMOJI = "🫧"
 SUMMARY_TITLE = "📋 خلاصه تغییرات ۲۴ ساعت گذشته"
 
 _PERSIAN_DIGITS = str.maketrans("0123456789.", "۰۱۲۳۴۵۶۷۸۹٫")
@@ -135,8 +137,22 @@ def _blocks(groups: list[list[Quote]], format_line) -> str:
     return "\n\n".join("\n".join(format_line(q) for q in group) for group in groups)
 
 
-def format_price_message(groups: list[list[Quote]], now: datetime | None = None) -> str:
-    return "\n".join([_blocks(groups, format_quote), *_footer(now)])
+def format_bubble(bubble: Bubble) -> str:
+    return f"{BUBBLE_EMOJI} {escape(bubble.name)}: <b>{format_change_pct(bubble.pct)}</b>"
+
+
+def format_price_message(
+    groups: list[list[Quote]], now: datetime | None = None, bubbles: list[Bubble] | None = None
+) -> str:
+    """Price blocks, with the bubbles (if any) as their own block after the IME certificates."""
+    blocks = ["\n".join(format_quote(q) for q in group) for group in groups]
+    if bubbles:
+        ime_index = next(
+            (i for i, g in enumerate(groups) if any(q.asset.key.startswith("ime_") for q in g)),
+            len(groups) - 1,
+        )
+        blocks.insert(ime_index + 1, "\n".join(format_bubble(b) for b in bubbles))
+    return "\n".join(["\n\n".join(blocks), *_footer(now)])
 
 
 def format_summary_message(groups: list[list[Quote]], now: datetime | None = None) -> str:
