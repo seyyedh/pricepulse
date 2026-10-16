@@ -45,17 +45,14 @@ def _change_emoji(change_pct: float) -> str:
 def trend_emoji(quote: Quote) -> str:
     """Color of the price's move.
 
-    - Assets showing their daily change are colored by it, to match the percentage shown.
-    - Others by their move over the last hour (a one-hour candle): as reported by the source
-      if it can (Binance), else the change since prev_price (an hour ago), compared at display
-      precision so a change too small to see doesn't count.
-    - If that didn't move (e.g. the market is closed) or is unknown, by the source's daily
-      change, so a quiet market shows the direction of its last day.
-    - If that is zero too (e.g. a new day before the market opens), by the price's last move,
-      like the last candle on a chart keeps its color.
+    - By the daily change, if the source reports one and it isn't zero, so the color always
+      matches the percentage shown next to the price.
+    - Otherwise (e.g. after midnight, before the market moves) by the last hour (a one-hour
+      candle): as reported by the source if it can (Binance), else the change since prev_price
+      (an hour ago), compared at display precision so a change too small to see doesn't count.
+    - Otherwise by the price's last move, like the last candle on a chart keeps its color.
     """
-    day = quote.day_change_pct
-    if quote.asset.show_day_change and day is not None:
+    if (day := _day_change(quote)) is not None:
         return _change_emoji(day)
     if quote.hour_change_pct is not None and (emoji := _change_emoji(quote.hour_change_pct)) != UNCHANGED:
         return emoji
@@ -65,11 +62,15 @@ def trend_emoji(quote: Quote) -> str:
         prev = round(quote.prev_price, decimals)
         if price != prev:
             return UP if price > prev else DOWN
-    if day is not None and (emoji := _change_emoji(day)) != UNCHANGED:
-        return emoji
     if quote.last_move_from is not None:
         return UP if quote.price > quote.last_move_from else DOWN
     return UNCHANGED
+
+
+def _day_change(quote: Quote) -> float | None:
+    """The daily change to show, or None if the source has none or it rounds to zero."""
+    day = quote.day_change_pct
+    return day if day is not None and round(day, 2) != 0 else None
 
 
 def format_number(value: float, decimals: int = 0) -> str:
@@ -84,8 +85,8 @@ def format_quote(quote: Quote) -> str:
     asset = quote.asset
     price = to_persian_digits(format_number(quote.price, asset.decimals))
     line = f"{trend_emoji(quote)} {escape(asset.name)}: <b>{price}</b> {escape(asset.unit)}"
-    if asset.show_day_change and quote.day_change_pct is not None:
-        line += f" ({format_change_pct(quote.day_change_pct)})"
+    if (day := _day_change(quote)) is not None:
+        line += f" ({format_change_pct(day)})"
     return line
 
 

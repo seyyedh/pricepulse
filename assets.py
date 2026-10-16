@@ -20,8 +20,6 @@ class Asset:
     # (open, close) in Tehran time; outside it the asset is left out of the message.
     # None means it is always shown.
     trading_hours: tuple[time, time] | None = None
-    # Show the source's daily change next to the price (and color by it)
-    show_day_change: bool = False
 
     def is_open(self, now: time) -> bool:
         if self.trading_hours is None:
@@ -71,9 +69,8 @@ def _with_tgju_day_change(
 
 
 def _ime(key: str, name: str, symbol: str, ticker: str) -> Asset:
-    # Iran Mercantile Exchange deposit certificate, price per certificate unit in Toman,
-    # shown with the exchange's own daily change
-    return Asset(key, name, symbol, "تومان", partial(chartix.fetch_price_toman, ticker), show_day_change=True)
+    # Iran Mercantile Exchange deposit certificate, price per certificate unit in Toman
+    return Asset(key, name, symbol, "تومان", partial(chartix.fetch_price_toman, ticker))
 
 
 # Each group is a block in the message, separated by a blank line
@@ -86,8 +83,6 @@ ASSET_GROUPS: list[list[Asset]] = [
             trading_hours=(time(9, 0), time(21, 0)),
         ),
         Asset("usd", "دلار", "USD", "تومان", _tgju_toman("price_dollar_rl")),
-        # tgju's plain "oil" item is stale
-        Asset("brent", "نفت برنت", "Brent", "دلار", _tgju("oil_brent"), decimals=2),
         # gold-api updates every few seconds; tgju's global prices can lag
         Asset(
             "xau", "انس طلا", "XAU", "دلار",
@@ -107,6 +102,8 @@ ASSET_GROUPS: list[list[Asset]] = [
             ),
         ),
         Asset("zinc", "روی", "Zinc", "دلار/تن", _tgju("base_global_zinc")),
+        # tgju's plain "oil" item is stale
+        Asset("brent", "نفت برنت", "Brent", "دلار", _tgju("oil_brent"), decimals=2),
     ],
     [
         Asset("gold18", "طلای ۱۸ عیار", "Gold 18K", "تومان", _tgju_toman("geram18")),
