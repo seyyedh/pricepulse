@@ -99,6 +99,13 @@ async def _pin_summary(bot: Bot, message: Message) -> None:
     except TelegramError as e:
         logger.error("Could not pin the summary (does the bot have 'Edit Messages' in the channel?): %s", e)
         return
+    # Telegram posts a "pinned a message" service message right after; channel message ids are
+    # sequential, so it is the next id. (Without receiving updates the bot can't see it, so this
+    # assumes nobody posted in the second between the summary and the pin.)
+    try:
+        await bot.delete_message(config.CHANNEL_ID, message.message_id + 1)
+    except TelegramError as e:
+        logger.warning("Could not delete the pin notice (does the bot have 'Delete Messages'?): %s", e)
     previous = pinned.get("summary")
     if previous is not None:
         try:
