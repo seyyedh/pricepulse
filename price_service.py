@@ -23,6 +23,7 @@ history = PriceHistory(DATA_DIR / "history.json")
 # Prices of the last channel post; the summary falls back to them for assets that are closed
 last_post = PriceStore(DATA_DIR / "last_post.json")
 last_summary = PriceStore(DATA_DIR / "last_summary.json")
+last_weekly_summary = PriceStore(DATA_DIR / "last_weekly_summary.json")
 
 
 async def _fetch(asset: Asset) -> SourcePrice | None:
@@ -91,8 +92,8 @@ def mark_posted(groups: list[list[Quote]]) -> None:
     last_post.update(prices_of(groups))
 
 
-async def get_summary_quotes() -> list[list[Quote]]:
-    """Quotes for the daily summary.
+async def get_summary_quotes(weekly: bool = False) -> list[list[Quote]]:
+    """Quotes for the daily summary (or the weekly one), compared with the previous one.
 
     Assets that are closed now (e.g. USDT at night) or failed to fetch use their price in the
     last channel post, so the summary still covers them.
@@ -102,9 +103,9 @@ async def get_summary_quotes() -> list[list[Quote]]:
         for asset in group:
             if prices.get(asset.key) is None and (last := last_post.get(asset.key)) is not None:
                 prices[asset.key] = SourcePrice(last)
-    return _build_groups(prices, last_summary.get)
+    return _build_groups(prices, (last_weekly_summary if weekly else last_summary).get)
 
 
-def mark_summary_posted(groups: list[list[Quote]]) -> None:
-    """Call after the daily summary was posted; tomorrow's summary is compared with it."""
-    last_summary.update(prices_of(groups))
+def mark_summary_posted(groups: list[list[Quote]], weekly: bool = False) -> None:
+    """Call after the daily (weekly) summary was posted; the next one is compared with it."""
+    (last_weekly_summary if weekly else last_summary).update(prices_of(groups))

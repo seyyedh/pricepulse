@@ -20,6 +20,7 @@ CHANNEL_EMOJI = "📊"
 BUBBLE_EMOJI = "🫧"
 RLM = "‏"  # right-to-left mark (invisible)
 SUMMARY_TITLE = "📋 خلاصه تغییرات ۲۴ ساعت گذشته"
+WEEKLY_SUMMARY_TITLE = "🗓 خلاصه تغییرات هفته گذشته"
 
 _PERSIAN_DIGITS = str.maketrans("0123456789.", "۰۱۲۳۴۵۶۷۸۹٫")
 
@@ -167,5 +168,8 @@ def format_price_message(
     return "\n".join(["\n\n".join(blocks), *_footer(now)])
 
 
-def format_summary_message(groups: list[list[Quote]], now: datetime | None = None) -> str:
-    return "\n".join([SUMMARY_TITLE, "", _blocks(groups, format_summary_quote), *_footer(now)])
+def format_summary_message(
+    groups: list[list[Quote]], now: datetime | None = None, weekly: bool = False
+) -> str:
+    title = WEEKLY_SUMMARY_TITLE if weekly else SUMMARY_TITLE
+    return "\n".join([title, "", _blocks(groups, format_summary_quote), *_footer(now)])

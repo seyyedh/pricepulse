@@ -6,7 +6,7 @@ from datetime import datetime, time, timedelta
 
 from telegram import Bot, Message, Update
 from telegram.constants import ChatAction, ParseMode
-from telegram.error import TelegramError
+from telegram.error import BadRequest, TelegramError
 from telegram.ext import (
     Application,
     CallbackQueryHandler,
@@ -36,6 +36,12 @@ logger = logging.getLogger(__name__)
 
 DAILY_SUMMARY_TIME = time(23, 55, tzinfo=config.TIMEZONE)
 POST_INTERVAL = timedelta(minutes=30)
+# Tehran hours [start, end) with a new price message every half hour; outside them a new
+# message only on the hour, and the half hour edits it
+BUSY_HOURS = (9, 18)
+# A half-hour run only edits a message posted at most this long ago
+MAX_EDIT_AGE = timedelta(minutes=50)
+WEEKLY_SUMMARY_WEEKDAY = 4  # Friday (datetime.weekday(): Monday is 0)
 
 # One-shot mode can be triggered by more than one scheduler (cron-job.org, with GitHub's own
 # cron as a backup); a post made more recently than this is not repeated
@@ -115,19 +121,60 @@ async def _pin_summary(bot: Bot, message: Message) -> None:
     pinned.update({"summary": message.message_id})
 
 
-async def post_prices(bot: Bot) -> bool:
+def _edits_previous(now: datetime) -> bool:
+    """Whether this half-hour slot updates the previous price message instead of posting one.
+
+    During busy market hours (BUSY_HOURS) a new message goes out every half hour; the rest of
+    the day only on the hour, and the half hour edits that hour's message.
+    """
+    start, end = BUSY_HOURS
+    return now.minute >= 30 and not start <= now.hour < end
+
+
+async def _edit_in_channel(bot: Bot, message_id: int, text: str) -> bool:
+    try:
+        await bot.edit_message_text(text, config.CHANNEL_ID, message_id, parse_mode=ParseMode.HTML)
+        return True
+    except BadRequest as e:
+        if "not modified" in str(e).lower():  # same text as before: nothing to update
+            return True
+        logger.warning("Could not edit price message %d, posting a new one: %s", message_id, e)
+    except TelegramError as e:
+        logger.warning("Could not edit price message %d, posting a new one: %s", message_id, e)
+    return False
+
+
+async def post_prices(bot: Bot, now: datetime | None = None) -> bool:
+    now = now or datetime.now(config.TIMEZONE)
     quotes = await get_quotes()
     if not quotes:
         logger.error("No prices could be fetched; nothing posted to %s", config.CHANNEL_ID)
         return False
-    if not await _send_to_channel(bot, await _price_message(quotes)):
+    text = await _price_message(quotes)
+
+    # message_ids: "prices" -> id of the last new price message, "prices_at" -> its Unix time
+    message_ids = PriceStore(DATA_DIR / "message_ids.json")
+    last_id, last_at = message_ids.get("prices"), message_ids.get("prices_at")
+    # Only edit the message of this hour: if runs were missed, post a fresh one instead
+    recent = last_at is not None and now.timestamp() - last_at < MAX_EDIT_AGE.total_seconds()
+    if _edits_previous(now) and last_id is not None and recent:
+        if await _edit_in_channel(bot, int(last_id), text):
+            mark_posted(quotes)
+            logger.info("Updated price message %d in %s", last_id, config.CHANNEL_ID)
+            return True
+
+    message = await _send_to_channel(bot, text)
+    if message is None:
         return False
+    message_ids.update({"prices": message.message_id, "prices_at": now.timestamp()})
     mark_posted(quotes)
     logger.info("Posted prices to %s", config.CHANNEL_ID)
     return True
 
 
-async def post_summary(bot: Bot) -> bool:
+async def post_summary(bot: Bot, now: datetime | None = None) -> bool:
+    """Posts (and pins) the daily summary; on Fridays the weekly summary follows it."""
+    now = now or datetime.now(config.TIMEZONE)
     quotes = await get_summary_quotes()
     if not quotes:
         logger.error("No prices could be fetched; daily summary not posted to %s", config.CHANNEL_ID)
@@ -138,6 +185,12 @@ async def post_summary(bot: Bot) -> bool:
     mark_summary_posted(quotes)
     logger.info("Posted daily summary to %s", config.CHANNEL_ID)
     await _pin_summary(bot, message)
+
+    if now.weekday() == WEEKLY_SUMMARY_WEEKDAY:
+        weekly = await get_summary_quotes(weekly=True)
+        if weekly and await _send_to_channel(bot, format_summary_message(weekly, weekly=True)):
+            mark_summary_posted(weekly, weekly=True)
+            logger.info("Posted weekly summary to %s", config.CHANNEL_ID)
     return True
 
 
