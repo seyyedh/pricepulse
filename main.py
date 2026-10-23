@@ -4,7 +4,7 @@ import logging
 import sys
 from datetime import datetime, time, timedelta
 
-from telegram import Bot, Update
+from telegram import Bot, Message, Update
 from telegram.constants import ChatAction, ParseMode
 from telegram.error import TelegramError
 from telegram.ext import (
@@ -80,13 +80,32 @@ async def _price_message(quotes) -> str:
     return format_price_message(quotes, bubbles=await get_bubbles(prices_of(quotes)))
 
 
-async def _send_to_channel(bot: Bot, text: str) -> bool:
+async def _send_to_channel(bot: Bot, text: str) -> Message | None:
     try:
-        await bot.send_message(config.CHANNEL_ID, text, parse_mode=ParseMode.HTML)
-        return True
+        return await bot.send_message(config.CHANNEL_ID, text, parse_mode=ParseMode.HTML)
     except TelegramError as e:
         logger.error("Could not post to %s (is the bot an admin with 'Post Messages'?): %s", config.CHANNEL_ID, e)
-        return False
+        return None
+
+
+async def _pin_summary(bot: Bot, message: Message) -> None:
+    """Pins the daily summary and unpins the previous one, so only the latest stays pinned.
+
+    A failure is only logged: the summary itself was posted.
+    """
+    pinned = PriceStore(DATA_DIR / "pinned.json")  # "summary" -> message id of the pinned summary
+    try:
+        await bot.pin_chat_message(config.CHANNEL_ID, message.message_id, disable_notification=True)
+    except TelegramError as e:
+        logger.error("Could not pin the summary (does the bot have 'Edit Messages' in the channel?): %s", e)
+        return
+    previous = pinned.get("summary")
+    if previous is not None:
+        try:
+            await bot.unpin_chat_message(config.CHANNEL_ID, int(previous))
+        except TelegramError as e:
+            logger.warning("Could not unpin the previous summary %d: %s", previous, e)
+    pinned.update({"summary": message.message_id})
 
 
 async def post_prices(bot: Bot) -> bool:
@@ -106,10 +125,12 @@ async def post_summary(bot: Bot) -> bool:
     if not quotes:
         logger.error("No prices could be fetched; daily summary not posted to %s", config.CHANNEL_ID)
         return False
-    if not await _send_to_channel(bot, format_summary_message(quotes)):
+    message = await _send_to_channel(bot, format_summary_message(quotes))
+    if message is None:
         return False
     mark_summary_posted(quotes)
     logger.info("Posted daily summary to %s", config.CHANNEL_ID)
+    await _pin_summary(bot, message)
     return True
 
 
