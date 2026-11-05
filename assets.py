@@ -93,15 +93,15 @@ ASSET_GROUPS: list[list[Asset]] = [
             _with_tgju_day_change(partial(goldapi.fetch_price, "XAG"), "silver"), decimals=2,
         ),
         # Copper is COMEX (USD/lb, converted to tons); zinc is tgju's global (LME) price.
-        # tgju's plain "copper"/"zinc" items are stale
+        # tgju's older "copper", "zinc" and "base_global_*" items are stale
         Asset(
             "copper", "مس", "Copper", "دلار/تن",
             _with_tgju_day_change(
                 partial(goldapi.fetch_price, "HG", multiplier=goldapi.POUNDS_PER_TON),
-                "base_global_copper2",  # tgju's COMEX copper
+                "basemetal-copper",  # tgju's COMEX copper
             ),
         ),
-        Asset("zinc", "روی", "Zinc", "دلار/تن", _tgju("base_global_zinc")),
+        Asset("zinc", "روی", "Zinc", "دلار/تن", _tgju("basemetal-zinc")),
         # tgju's plain "oil" item is stale
         Asset("brent", "نفت برنت", "Brent", "دلار", _tgju("oil_brent"), decimals=2),
     ],

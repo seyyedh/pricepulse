@@ -33,7 +33,7 @@ class Bubble:
 async def _lme_copper_per_ton() -> float | None:
     # The copper in the price list is COMEX; LME comes from tgju (already fetched, so cached)
     try:
-        return (await tgju.fetch_price("base_global_copper", timedelta(days=3))).price
+        return (await tgju.fetch_price("basemetal-london-copper", timedelta(days=3))).price
     except Exception as e:
         logger.warning("No LME copper price for the copper bubble: %s", e)
         return None
