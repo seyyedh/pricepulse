@@ -58,6 +58,7 @@ jobs:
       - name: Post
         env:
           BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
+          ADMIN_CHAT_ID: ${{ secrets.ADMIN_CHAT_ID }}
           KIND: ${{ github.event.schedule == '25 20 * * *' && 'summary' || inputs.kind || 'prices' }}
           # GitHub's cron is only the backup trigger
           BACKUP: ${{ github.event_name == 'schedule' && '--backup' || '' }}

@@ -14,7 +14,9 @@ from telegram.ext import (
     ContextTypes,
 )
 
+import alerts
 import config
+import price_service
 from formatter import format_price_message, format_summary_message
 from bubbles import get_bubbles
 from price_service import get_quotes, get_summary_quotes, mark_posted, mark_summary_posted, prices_of
@@ -147,8 +149,10 @@ async def _edit_in_channel(bot: Bot, message_id: int, text: str) -> bool:
 async def post_prices(bot: Bot, now: datetime | None = None) -> bool:
     now = now or datetime.now(config.TIMEZONE)
     quotes = await get_quotes()
+    await alerts.check_missing_prices(bot, price_service.fetch_failures, now)
     if not quotes:
         logger.error("No prices could be fetched; nothing posted to %s", config.CHANNEL_ID)
+        await alerts.report_failure(bot, "prices", "هیچ قیمتی دریافت نشد؛ پیام قیمت ارسال نشد", now)
         return False
     text = await _price_message(quotes)
 
@@ -165,7 +169,9 @@ async def post_prices(bot: Bot, now: datetime | None = None) -> bool:
 
     message = await _send_to_channel(bot, text)
     if message is None:
+        await alerts.report_failure(bot, "prices", "ارسال پیام قیمت به کانال ناموفق بود (دسترسی بات؟)", now)
         return False
+    await alerts.report_failure(bot, "prices", None, now)
     message_ids.update({"prices": message.message_id, "prices_at": now.timestamp()})
     mark_posted(quotes)
     logger.info("Posted prices to %s", config.CHANNEL_ID)
@@ -220,6 +226,9 @@ async def post_once(kind: str, backup: bool = False) -> bool:
         return True
 
     async with Bot(config.BOT_TOKEN) as bot:
+        if kind == "prices":
+            last_post = datetime.fromtimestamp(last, config.TIMEZONE) if last is not None else None
+            await alerts.check_post_gap(bot, last_post, now)
         posted = await POSTERS[kind](bot)
     if posted:
         post_times.update({kind: now.timestamp()})

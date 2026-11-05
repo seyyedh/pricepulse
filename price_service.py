@@ -26,15 +26,22 @@ last_summary = PriceStore(DATA_DIR / "last_summary.json")
 last_weekly_summary = PriceStore(DATA_DIR / "last_weekly_summary.json")
 
 
+# Assets whose price couldn't be fetched in the last fetch: key -> (name, reason)
+fetch_failures: dict[str, tuple[str, str]] = {}
+
+
 async def _fetch(asset: Asset) -> SourcePrice | None:
     try:
         result = await asset.fetch()
         return result if isinstance(result, SourcePrice) else SourcePrice(result)
     except StalePriceError as e:
         logger.warning("Leaving out %s: %s", asset.key, e)
+        fetch_failures[asset.key] = (asset.name, str(e))
         return None
-    except Exception:
+    except Exception as e:
         logger.exception("Failed to fetch price for %s", asset.key)
+        cause = f"{e} <- {e.__cause__}" if e.__cause__ else str(e)
+        fetch_failures[asset.key] = (asset.name, f"{type(e).__name__}: {cause}")
         return None
 
 
@@ -42,6 +49,7 @@ async def _fetch_open_assets() -> dict[str, SourcePrice | None]:
     """Prices of all assets whose market is open now, by key."""
     now = datetime.now(config.TIMEZONE).time()
     assets = [a for group in ASSET_GROUPS for a in group if a.is_open(now)]
+    fetch_failures.clear()
     prices = await asyncio.gather(*(_fetch(a) for a in assets))
     return dict(zip((a.key for a in assets), prices))
 

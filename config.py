@@ -32,3 +32,7 @@ CHANNEL_TITLE = os.getenv("CHANNEL_TITLE", "Price Pulse").strip()
 CHANNEL_HANDLE = CHANNEL_ID if CHANNEL_ID.startswith("@") else CHANNEL_LINK
 
 TIMEZONE = ZoneInfo(os.getenv("TIMEZONE", "Asia/Tehran"))
+
+# Telegram user id that gets private alerts when prices go missing or posting stops (optional).
+# The admin must have sent /start to the bot once, or Telegram won't let it message them.
+ADMIN_CHAT_ID = os.getenv("ADMIN_CHAT_ID", "").strip()
