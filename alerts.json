@@ -1,17 +1,1 @@
-{
-  "missing:xau": {
-    "since": 1794376848.317337,
-    "alerted": false,
-    "label": "قیمت «انس طلا» در پیام‌ها نیست"
-  },
-  "missing:xag": {
-    "since": 1794376848.317337,
-    "alerted": false,
-    "label": "قیمت «انس نقره» در پیام‌ها نیست"
-  },
-  "missing:copper": {
-    "since": 1794376848.317337,
-    "alerted": false,
-    "label": "قیمت «مس» در پیام‌ها نیست"
-  }
-}
+{}
