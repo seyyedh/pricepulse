@@ -1,1 +1,12 @@
-{}
+{
+  "missing:zinc": {
+    "since": 1794774641.427886,
+    "alerted": false,
+    "label": "قیمت «روی» در پیام‌ها نیست"
+  },
+  "missing:brent": {
+    "since": 1794774641.427886,
+    "alerted": false,
+    "label": "قیمت «نفت برنت» در پیام‌ها نیست"
+  }
+}
