@@ -1,17 +1,32 @@
 {
-  "missing:xau": {
-    "since": 1795105848.686434,
+  "missing:ime_gold": {
+    "since": 1795107655.376343,
     "alerted": false,
-    "label": "قیمت «انس طلا» در پیام‌ها نیست"
+    "label": "قیمت «سپرده شمش طلا» در پیام‌ها نیست"
   },
-  "missing:xag": {
-    "since": 1795105848.686434,
+  "missing:ime_coin": {
+    "since": 1795107655.376343,
     "alerted": false,
-    "label": "قیمت «انس نقره» در پیام‌ها نیست"
+    "label": "قیمت «سپرده سکه» در پیام‌ها نیست"
   },
-  "missing:copper": {
-    "since": 1795105848.686434,
+  "missing:ime_silver": {
+    "since": 1795107655.376343,
     "alerted": false,
-    "label": "قیمت «مس» در پیام‌ها نیست"
+    "label": "قیمت «سپرده نقره» در پیام‌ها نیست"
+  },
+  "missing:ime_copper": {
+    "since": 1795107655.376343,
+    "alerted": false,
+    "label": "قیمت «سپرده مس» در پیام‌ها نیست"
+  },
+  "missing:ime_zinc": {
+    "since": 1795107655.376343,
+    "alerted": false,
+    "label": "قیمت «سپرده روی» در پیام‌ها نیست"
+  },
+  "missing:ime_iron": {
+    "since": 1795107655.376343,
+    "alerted": false,
+    "label": "قیمت «سپرده سنگ آهن» در پیام‌ها نیست"
   }
 }
